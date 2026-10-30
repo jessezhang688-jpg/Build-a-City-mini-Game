@@ -10,23 +10,43 @@ SCREEN_WIDTH = 1200
 SCREEN_HEIGHT = 800
 
 screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.RESIZABLE)
-pygame.display.set_caption("Tile City Builder - Brush Mode")
+pygame.display.set_caption("Tile City Builder - Calendar & Realistic Economy")
 clock = pygame.time.Clock()
 font = pygame.font.SysFont(None, 24)
 title_font = pygame.font.SysFont(None, 28)
 
 GRID_SIZE = 30
 grid = [[0 for _ in range(GRID_SIZE)] for _ in range(GRID_SIZE)]
+house_pop = {}  # Tracks specific population for each house tile at (row, col)
+
 current_tool = 1
 money = 1000
 population = 0
 message = "Press R: New World | S: Save | L: Load"
 
+# Time System Variables (1 month = 5 real seconds)
+months_passed = 0
+years_passed = 0
+
 is_loading = False
 input_text = ""
-last_painted_tile = None  # Tracks the last tile painted during a drag
+last_painted_tile = None
+
+# Game Timers
+TIME_EVENT = pygame.USEREVENT + 1
+pygame.time.set_timer(TIME_EVENT, 5000)  # Advances 1 month every 5 seconds
+
+def recalculate_total_population():
+    global population
+    population = sum(house_pop.values())
 
 def generate_world():
+    global house_pop, population, months_passed, years_passed
+    house_pop.clear()
+    population = 0
+    months_passed = 0
+    years_passed = 0
+    
     for r in range(GRID_SIZE):
         for c in range(GRID_SIZE):
             grid[r][c] = 0
@@ -71,20 +91,41 @@ def generate_world():
                 break
 
 def save_game():
-    data = {"grid": grid, "money": money, "pop": population}
+    serializable_house_pop = {f"{r},{c}": pop for (r, c), pop in house_pop.items()}
+    data = {
+        "grid": grid, 
+        "money": money, 
+        "house_pop": serializable_house_pop,
+        "months": months_passed,
+        "years": years_passed
+    }
     json_str = json.dumps(data)
     code = base64.b64encode(json_str.encode('utf-8')).decode('utf-8')
     print(f"\n--- YOUR SAVE CODE ---\n{code}\n----------------------\n")
     return code
 
 def load_game(code):
-    global grid, money, population
+    global grid, money, house_pop, months_passed, years_passed
     try:
         json_str = base64.b64decode(code.strip().encode('utf-8')).decode('utf-8')
         data = json.loads(json_str)
         grid = data["grid"]
         money = data["money"]
-        population = data["pop"]
+        months_passed = data.get("months", 0)
+        years_passed = data.get("years", 0)
+        
+        house_pop.clear()
+        if "house_pop" in data:
+            for key, val in data["house_pop"].items():
+                r, c = map(int, key.split(","))
+                house_pop[(r, c)] = val
+        else:
+            for r in range(GRID_SIZE):
+                for c in range(GRID_SIZE):
+                    if grid[r][c] == 2:
+                        house_pop[(r, c)] = 2
+
+        recalculate_total_population()
         return True
     except:
         return False
@@ -96,14 +137,21 @@ def draw_ui_panels(width, height):
     grid_px = GRID_SIZE * tile_size
     offset_x = (width - grid_px) // 2
 
-    # Left Panel: City Stats
+    # Left Panel: City Stats & Time
     left_panel = pygame.Rect(0, 0, offset_x, height)
     pygame.draw.rect(screen, (25, 25, 30), left_panel)
     pygame.draw.line(screen, (70, 70, 80), (offset_x, 0), (offset_x, height), 2)
     
     screen.blit(title_font.render("CITY STATS", True, (255, 255, 255)), (20, 25))
-    screen.blit(font.render(f"Money: ${money}", True, (230, 200, 50)), (20, 80))
-    screen.blit(font.render(f"Population: {population}", True, (100, 220, 100)), (20, 120))
+    
+    # Calendar & Date Display
+    month_names = ["", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+    current_month_name = month_names[(months_passed % 12) + 1]
+    date_str = f"Date: Year {years_passed + 1}, {current_month_name}"
+    screen.blit(font.render(date_str, True, (200, 200, 100)), (20, 70))
+
+    screen.blit(font.render(f"Money: ${money}", True, (230, 200, 50)), (20, 110))
+    screen.blit(font.render(f"Population: {population}", True, (100, 220, 100)), (20, 145))
 
     screen.blit(title_font.render("CONTROLS", True, (255, 255, 255)), (20, height - 180))
     screen.blit(font.render("R - New World", True, (180, 180, 180)), (20, height - 140))
@@ -177,15 +225,33 @@ while True:
             pygame.quit()
             sys.exit()
 
+        # Handle Time Passing (1 tick = 1 month)
+        elif event.type == TIME_EVENT:
+            months_passed += 1
+            if months_passed >= 12:
+                months_passed = 0
+                years_passed += 1
+
+            # Natural Population Growth over months (gradually grows up to 8 people per house)
+            for pos in list(house_pop.keys()):
+                if house_pop[pos] < 8 and random.random() < 0.3:
+                    house_pop[pos] += 1
+            recalculate_total_population()
+
+            # Annual Tax Collection (Collected every December / End of Year)
+            if months_passed == 0 and population > 0:
+                tax_income = population * 12  # $12 per citizen annually
+                money += tax_income
+                message = f"Annual Taxes Collected: ${tax_income}!"
+
         elif event.type == pygame.MOUSEBUTTONUP and event.button == 1:
-            last_painted_tile = None  # Reset drag stroke when mouse is released
+            last_painted_tile = None
 
         elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             if not is_loading:
                 mx, my = pygame.mouse.get_pos()
                 right_x = offset_x + grid_px
                 
-                # Check build menu clicks
                 if mx >= right_x:
                     if 80 <= my <= 130: current_tool = 1
                     elif 150 <= my <= 200: current_tool = 2
@@ -229,7 +295,7 @@ while True:
                     input_text = ""
                     message = "Enter save code & press ENTER"
 
-    # Continuous Mouse Check for Drag-to-Paint (Brush Mode)
+    # Drag-to-Paint Brush Handling
     if not is_loading and pygame.mouse.get_pressed()[0]:
         mx, my = pygame.mouse.get_pos()
         right_x = offset_x + grid_px
@@ -237,7 +303,6 @@ while True:
             col = (mx - offset_x) // tile_size
             row = (my - offset_y) // tile_size
             
-            # Only paint if it's a new tile in the current drag motion
             if (row, col) != last_painted_tile:
                 last_painted_tile = (row, col)
                 current_tile = grid[row][col]
@@ -249,9 +314,12 @@ while True:
                     elif current_tool == 2 and current_tile == 0 and money >= 50:
                         grid[row][col] = 2
                         money -= 50
-                        population += 5
+                        house_pop[(row, col)] = 2  # Starts with 2 people
+                        recalculate_total_population()
                     elif current_tool == 3 and current_tile != 0:
-                        if current_tile == 2: population -= 5
+                        if current_tile == 2 and (row, col) in house_pop:
+                            del house_pop[(row, col)]
+                            recalculate_total_population()
                         grid[row][col] = 0
                         money += 5
 
