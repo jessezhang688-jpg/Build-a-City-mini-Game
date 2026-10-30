@@ -11,17 +11,17 @@ SCREEN_HEIGHT = 800
 GRID_SIZE = 30
 
 screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.RESIZABLE)
-pygame.display.set_caption("Tile City Builder - Organic Lakes & Save System")
+pygame.display.set_caption("Tile City Builder - Dedicated Side Panels")
 clock = pygame.time.Clock()
 font = pygame.font.SysFont(None, 24)
+title_font = pygame.font.SysFont(None, 28)
 
 grid = [[0 for _ in range(GRID_SIZE)] for _ in range(GRID_SIZE)]
 current_tool = 1
 money = 1000
 population = 0
-message = "Press R to regenerate | S to save | L to load"
+message = "Press R: New World | S: Save | L: Load"
 
-# Input box state for loading save codes
 is_loading = False
 input_text = ""
 
@@ -89,50 +89,90 @@ def load_game(code):
 generate_world()
 
 def draw_ui_panels(width, height):
-    hud_rect = pygame.Rect(0, 0, width, 50)
-    pygame.draw.rect(screen, (35, 35, 35), hud_rect)
-    pygame.draw.line(screen, (70, 70, 70), (0, 50), (width, 50), 2)
-
-    tool_names = {1: "Road ($10)", 2: "House ($50)", 3: "Bulldozer"}
-    text = font.render(f"${money} | Pop: {population} | Tool: {tool_names[current_tool]} | {message}", True, (255, 255, 255))
-    screen.blit(text, (20, 15))
-
-    hud_height = 50
+    hud_height = 0  # Removed top banner, using side panels fully
     avail_height = height - hud_height
     tile_size = min(width // GRID_SIZE, avail_height // GRID_SIZE)
     grid_px = GRID_SIZE * tile_size
     offset_x = (width - grid_px) // 2
 
-    # Left Panel
-    left_panel = pygame.Rect(0, hud_height, offset_x, avail_height)
-    pygame.draw.rect(screen, (25, 25, 25), left_panel)
-    pygame.draw.line(screen, (70, 70, 70), (offset_x, hud_height), (offset_x, height), 2)
-    left_text = font.render("Left UI Panel", True, (120, 120, 120))
-    screen.blit(left_text, (20, hud_height + 20))
+    # --- LEFT PANEL: Status & Stats ---
+    left_panel = pygame.Rect(0, 0, offset_x, height)
+    pygame.draw.rect(screen, (25, 25, 30), left_panel)
+    pygame.draw.line(screen, (70, 70, 80), (offset_x, 0), (offset_x, height), 2)
+    
+    title = title_font.render("CITY STATS", True, (255, 255, 255))
+    screen.blit(title, (20, 25))
 
-    # Right Panel
-    right_panel = pygame.Rect(offset_x + grid_px, hud_height, width - (offset_x + grid_px), avail_height)
-    pygame.draw.rect(screen, (25, 25, 25), right_panel)
-    pygame.draw.line(screen, (70, 70, 70), (offset_x + grid_px, hud_height), (offset_x + grid_px, height), 2)
-    right_text = font.render("Right UI Panel", True, (120, 120, 120))
-    screen.blit(right_text, (offset_x + grid_px + 20, hud_height + 20))
+    money_lbl = font.render(f"Money: ${money}", True, (230, 200, 50))
+    pop_lbl = font.render(f"Population: {population}", True, (100, 220, 100))
+    screen.blit(money_lbl, (20, 80))
+    screen.blit(pop_lbl, (20, 120))
 
-    # Load prompt box overlay when typing a code
+    # Instructions at bottom of left panel
+    inst_title = title_font.render("CONTROLS", True, (255, 255, 255))
+    screen.blit(inst_title, (20, height - 180))
+    
+    inst_text1 = font.render("R - New World", True, (180, 180, 180))
+    inst_text2 = font.render("S - Save Game", True, (180, 180, 180))
+    inst_text3 = font.render("L - Load Game", True, (180, 180, 180))
+    screen.blit(inst_text1, (20, height - 140))
+    screen.blit(inst_text2, (20, height - 110))
+    screen.blit(inst_text3, (20, height - 80))
+
+    # --- RIGHT PANEL: Build Menu ---
+    right_x = offset_x + grid_px
+    right_panel = pygame.Rect(right_x, 0, width - right_x, height)
+    pygame.draw.rect(screen, (25, 25, 30), right_panel)
+    pygame.draw.line(screen, (70, 70, 80), (right_x, 0), (right_x, height), 2)
+
+    build_title = title_font.render("BUILD MENU", True, (255, 255, 255))
+    screen.blit(build_title, (right_x + 20, 25))
+
+    # Tool buttons representation in Right Panel
+    tools = [
+        (1, "1. Road", "$10", (100, 100, 100)),
+        (2, "2. House", "$50", (46, 139, 87)),
+        (3, "3. Bulldozer", "Free", (200, 70, 70))
+    ]
+
+    for idx, (t_id, t_name, t_cost, t_color) in enumerate(tools):
+        btn_y = 80 + (idx * 70)
+        btn_rect = pygame.Rect(right_x + 20, btn_y, width - right_x - 40, 50)
+        
+        # Highlight active tool
+        border_color = (255, 255, 255) if current_tool == t_id else (70, 70, 80)
+        bg_color = (45, 45, 55) if current_tool == t_id else (35, 35, 40)
+        
+        pygame.draw.rect(screen, bg_color, btn_rect, border_radius=6)
+        pygame.draw.rect(screen, border_color, btn_rect, 2, border_radius=6)
+
+        # Color indicator swatch
+        swatch = pygame.Rect(right_x + 35, btn_y + 15, 20, 20)
+        pygame.draw.rect(screen, t_color, swatch)
+
+        name_lbl = font.render(t_name, True, (255, 255, 255))
+        cost_lbl = font.render(t_cost, True, (200, 200, 200))
+        screen.blit(name_lbl, (right_x + 65, btn_y + 15))
+        screen.blit(cost_lbl, (btn_rect.right - 60, btn_y + 15))
+
+    # Status message at bottom of right panel
+    msg_lbl = font.render(message, True, (150, 200, 255))
+    screen.blit(msg_lbl, (right_x + 20, height - 50))
+
+    # Load prompt box overlay
     if is_loading:
         prompt_box = pygame.Rect(width // 4, height // 2 - 30, width // 2, 60)
         pygame.draw.rect(screen, (40, 40, 50), prompt_box)
         pygame.draw.rect(screen, (200, 200, 255), prompt_box, 2)
-        load_lbl = font.render(f"Paste/Type Code: {input_text}_", True, (255, 255, 255))
+        load_lbl = font.render(f"Paste Code (Ctrl+V) & Enter: {input_text}_", True, (255, 255, 255))
         screen.blit(load_lbl, (prompt_box.x + 15, prompt_box.y + 20))
 
 def draw_city(width, height):
-    hud_height = 50
-    avail_height = height - hud_height
-    tile_size = min(width // GRID_SIZE, avail_height // GRID_SIZE)
+    tile_size = min(width // GRID_SIZE, height // GRID_SIZE)
     grid_px = GRID_SIZE * tile_size
     
     offset_x = (width - grid_px) // 2
-    offset_y = hud_height + (avail_height - grid_px) // 2
+    offset_y = (height - grid_px) // 2
 
     for row in range(GRID_SIZE):
         for col in range(GRID_SIZE):
@@ -149,12 +189,10 @@ def draw_city(width, height):
 
 while True:
     width, height = screen.get_size()
-    hud_height = 50
-    avail_height = height - hud_height
-    tile_size = min(width // GRID_SIZE, avail_height // GRID_SIZE)
+    tile_size = min(width // GRID_SIZE, height // GRID_SIZE)
     grid_px = GRID_SIZE * tile_size
     offset_x = (width - grid_px) // 2
-    offset_y = hud_height + (avail_height - grid_px) // 2
+    offset_y = (height - grid_px) // 2
 
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
@@ -164,7 +202,16 @@ while True:
         elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             if not is_loading:
                 mx, my = pygame.mouse.get_pos()
-                if offset_x <= mx < offset_x + grid_px and offset_y <= my < offset_y + grid_px:
+                
+                # Check if clicking build menu buttons on the right panel
+                right_x = offset_x + grid_px
+                if mx >= right_x:
+                    if 80 <= my <= 130: current_tool = 1
+                    elif 150 <= my <= 200: current_tool = 2
+                    elif 220 <= my <= 270: current_tool = 3
+                
+                # Check if clicking grid
+                elif offset_x <= mx < offset_x + grid_px and offset_y <= my < offset_y + grid_px:
                     col = (mx - offset_x) // tile_size
                     row = (my - offset_y) // tile_size
                     current_tile = grid[row][col]
@@ -184,7 +231,6 @@ while True:
 
         elif event.type == pygame.KEYDOWN:
             if is_loading:
-                # Text input mode handling
                 if event.key == pygame.K_RETURN:
                     if load_game(input_text):
                         message = "World Loaded Successfully!"
@@ -198,7 +244,6 @@ while True:
                     message = "Load canceled"
                 elif event.key == pygame.K_BACKSPACE:
                     input_text = input_text[:-1]
-                # Paste shortcut support (Ctrl+V)
                 elif event.key == pygame.K_v and (pygame.key.get_mods() & pygame.KMOD_CTRL):
                     try:
                         import tkinter as tk
@@ -220,7 +265,7 @@ while True:
                 elif event.key == pygame.K_l:
                     is_loading = True
                     input_text = ""
-                    message = "Enter save code and press ENTER (ESC to cancel)"
+                    message = "Enter save code & press ENTER"
 
     screen.fill((15, 15, 15))
     draw_city(width, height)
