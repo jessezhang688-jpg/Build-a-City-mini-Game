@@ -3,6 +3,7 @@ import sys
 import json
 import base64
 import random
+from collections import deque
 
 pygame.init()
 
@@ -10,7 +11,7 @@ SCREEN_WIDTH = 1200
 SCREEN_HEIGHT = 800
 
 screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.RESIZABLE)
-pygame.display.set_caption("Tile City Builder - Zones & Economy")
+pygame.display.set_caption("Tile City Builder - Road Commuters & Economy")
 clock = pygame.time.Clock()
 font = pygame.font.SysFont(None, 24)
 title_font = pygame.font.SysFont(None, 28)
@@ -19,8 +20,8 @@ GRID_SIZE = 30
 grid = [[0 for _ in range(GRID_SIZE)] for _ in range(GRID_SIZE)]
 house_pop = {}  # Tracks population for house tiles at (row, col)
 
-current_tool = 1  # 1: Road, 2: House, 3: Commercial, 4: Industrial, 5: Bulldozer
-money = 1000
+current_tool = 1
+money = 500      # Starting budget
 population = 0
 message = "Press R: New World | S: Save | L: Load"
 
@@ -32,17 +33,21 @@ is_loading = False
 input_text = ""
 last_painted_tile = None
 
+# Worker Commuter Particles
+workers = []
+
 # Game Timers
 TIME_EVENT = pygame.USEREVENT + 1
-pygame.time.set_timer(TIME_EVENT, 5000)  # Advances 1 month every 5 seconds
+pygame.time.set_timer(TIME_EVENT, 5000)
 
 def recalculate_total_population():
     global population
     population = sum(house_pop.values())
 
 def generate_world():
-    global house_pop, population, months_passed, years_passed
+    global house_pop, population, months_passed, years_passed, workers
     house_pop.clear()
+    workers.clear()
     population = 0
     months_passed = 0
     years_passed = 0
@@ -105,7 +110,7 @@ def save_game():
     return code
 
 def load_game(code):
-    global grid, money, house_pop, months_passed, years_passed
+    global grid, money, house_pop, months_passed, years_passed, workers
     try:
         json_str = base64.b64decode(code.strip().encode('utf-8')).decode('utf-8')
         data = json.loads(json_str)
@@ -115,6 +120,7 @@ def load_game(code):
         years_passed = data.get("years", 0)
         
         house_pop.clear()
+        workers.clear()
         if "house_pop" in data:
             for key, val in data["house_pop"].items():
                 r, c = map(int, key.split(","))
@@ -131,6 +137,67 @@ def load_game(code):
         return False
 
 generate_world()
+
+def find_road_path(start, end):
+    """BFS to find a path consisting entirely of roads (1) between start and end."""
+    queue = deque([[start]])
+    visited = {start}
+    
+    while queue:
+        path = queue.popleft()
+        r, c = path[-1]
+        
+        if (r, c) == end:
+            return path
+            
+        for dr, dc in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
+            nr, nc = r + dr, c + dc
+            if 0 <= nr < GRID_SIZE and 0 <= nc < GRID_SIZE:
+                # Can walk on roads (1), or arrive at the end destination (4 or 5)
+                if (nr, nc) not in visited and (grid[nr][nc] == 1 or (nr, nc) == end):
+                    visited.add((nr, nc))
+                    queue.append(path + [(nr, nc)])
+    return None
+
+def spawn_commuters():
+    houses = list(house_pop.keys())
+    workplaces = [(r, c) for r in range(GRID_SIZE) for c in range(GRID_SIZE) if grid[r][c] in (4, 5)]
+    
+    if not houses or not workplaces:
+        return
+
+    workplace_counts = {}
+    for w in workers:
+        dest = w["end"]
+        workplace_counts[dest] = workplace_counts.get(dest, 0) + 1
+
+    for _ in range(min(len(houses), 4)):
+        h = random.choice(houses)
+        
+        available_workplaces = [wp for wp in workplaces if workplace_counts.get(wp, 0) < 5]
+        if not available_workplaces:
+            break
+            
+        w = random.choice(available_workplaces)
+        
+        home_workers = sum(1 for worker in workers if worker["home"] == h)
+        if home_workers >= house_pop[h]:
+            continue
+
+        # Check if there is a valid road path to work
+        path = find_road_path(h, w)
+        if path:
+            workplace_counts[w] = workplace_counts.get(w, 0) + 1
+            workers.append({
+                "home": h,
+                "path": path,
+                "path_index": 0,
+                "end": w,
+                "progress": 0.0,
+                "speed": 0.08,
+                "state": "GOING",
+                "work_timer": 120
+            })
 
 def draw_ui_panels(width, height):
     tile_size = min(width // GRID_SIZE, height // GRID_SIZE)
@@ -201,6 +268,11 @@ def draw_city(width, height):
     offset_x = (width - grid_px) // 2
     offset_y = (height - grid_px) // 2
 
+    absent_workers = {}
+    for w in workers:
+        h = w["home"]
+        absent_workers[h] = absent_workers.get(h, 0) + 1
+
     for row in range(GRID_SIZE):
         for col in range(GRID_SIZE):
             tile = grid[row][col]
@@ -212,9 +284,93 @@ def draw_city(width, height):
             elif tile == 5: color = (200, 120, 40)     # Industrial: Orange
             else: color = (85, 105, 80)                # Grass: Muted earthy green
 
-            rect = pygame.Rect(offset_x + col * tile_size, offset_y + row * tile_size, tile_size, tile_size)
+            rx = offset_x + col * tile_size
+            ry = offset_y + row * tile_size
+            rect = pygame.Rect(rx, ry, tile_size, tile_size)
             pygame.draw.rect(screen, color, rect)
             pygame.draw.rect(screen, (60, 75, 55), rect, 1)
+
+            # Draw citizen population dots inside houses (capped at 5 max, minus absent workers)
+            if tile == 2 and (row, col) in house_pop:
+                pop_count = house_pop[(row, col)]
+                absent = absent_workers.get((row, col), 0)
+                effective_pop = max(0, pop_count - absent)
+                
+                dot_radius = max(2, tile_size // 12)
+                offsets = [
+                    (0.30, 0.30), (0.70, 0.30), (0.30, 0.70), (0.70, 0.70),
+                    (0.50, 0.50)
+                ]
+                for i in range(min(effective_pop, len(offsets))):
+                    ox, oy = offsets[i]
+                    dx = rx + int(tile_size * ox)
+                    dy = ry + int(tile_size * oy)
+                    pygame.draw.circle(screen, (255, 255, 255), (dx, dy), dot_radius)
+
+    # Update and draw worker commuter particles along road paths
+    for w in workers[:]:
+        path = w["path"]
+        idx = w["path_index"]
+        
+        if w["state"] == "GOING":
+            w["progress"] += w["speed"]
+            if w["progress"] >= 1.0:
+                w["progress"] = 0.0
+                w["path_index"] += 1
+                if w["path_index"] >= len(path) - 1:
+                    w["state"] = "WORKING"
+            
+            curr_idx = min(w["path_index"], len(path) - 2)
+            next_idx = curr_idx + 1
+            
+            r1, c1 = path[curr_idx]
+            r2, c2 = path[next_idx]
+            
+            x1 = offset_x + c1 * tile_size + tile_size // 2
+            y1 = offset_y + r1 * tile_size + tile_size // 2
+            x2 = offset_x + c2 * tile_size + tile_size // 2
+            y2 = offset_y + r2 * tile_size + tile_size // 2
+            
+            curr_x = int(x1 + (x2 - x1) * w["progress"])
+            curr_y = int(y1 + (y2 - y1) * w["progress"])
+            pygame.draw.circle(screen, (255, 255, 255), (curr_x, curr_y), 3)
+
+        elif w["state"] == "WORKING":
+            w["work_timer"] -= 1
+            end_r, end_c = w["end"]
+            curr_x = offset_x + end_c * tile_size + tile_size // 2
+            curr_y = offset_y + end_r * tile_size + tile_size // 2
+            pygame.draw.circle(screen, (255, 255, 255), (curr_x, curr_y), 3)
+            
+            if w["work_timer"] <= 0:
+                w["state"] = "RETURNING"
+                w["path"] = list(reversed(path))  # Reverse path to go back home
+                w["path_index"] = 0
+                w["progress"] = 0.0
+
+        elif w["state"] == "RETURNING":
+            w["progress"] += w["speed"]
+            if w["progress"] >= 1.0:
+                w["progress"] = 0.0
+                w["path_index"] += 1
+                if w["path_index"] >= len(path) - 1:
+                    workers.remove(w)
+                    continue
+            
+            curr_idx = min(w["path_index"], len(path) - 2)
+            next_idx = curr_idx + 1
+            
+            r1, c1 = path[curr_idx]
+            r2, c2 = path[next_idx]
+            
+            x1 = offset_x + c1 * tile_size + tile_size // 2
+            y1 = offset_y + r1 * tile_size + tile_size // 2
+            x2 = offset_x + c2 * tile_size + tile_size // 2
+            y2 = offset_y + r2 * tile_size + tile_size // 2
+            
+            curr_x = int(x1 + (x2 - x1) * w["progress"])
+            curr_y = int(y1 + (y2 - y1) * w["progress"])
+            pygame.draw.circle(screen, (255, 255, 255), (curr_x, curr_y), 3)
 
 while True:
     width, height = screen.get_size()
@@ -228,33 +384,28 @@ while True:
             pygame.quit()
             sys.exit()
 
-        # Handle Time Passing (1 tick = 1 month)
         elif event.type == TIME_EVENT:
             months_passed += 1
             if months_passed >= 12:
                 months_passed = 0
                 years_passed += 1
 
-            # Natural Population Growth over months
             for pos in list(house_pop.keys()):
-                if house_pop[pos] < 8 and random.random() < 0.3:
+                if house_pop[pos] < 5 and random.random() < 0.3:
                     house_pop[pos] += 1
             recalculate_total_population()
 
-            # Annual Tax Collection at the end of each year
-            if months_passed == 0:
-                # Count commercial and industrial tiles
-                comm_count = sum(1 for r in range(GRID_SIZE) for c in range(GRID_SIZE) if grid[r][c] == 4)
-                ind_count = sum(1 for r in range(GRID_SIZE) for c in range(GRID_SIZE) if grid[r][c] == 5)
-                
-                house_tax = population * 12
-                comm_tax = comm_count * 30
-                ind_tax = ind_count * 50
-                
-                total_tax = house_tax + comm_tax + ind_tax
-                money += total_tax
-                if total_tax > 0:
-                    message = f"Annual Tax: ${total_tax} collected!"
+            spawn_commuters()
+
+            # Taxation only for citizens who are currently employed / commuting workers
+            employed_citizens = len(workers)
+            comm_count = sum(1 for r in range(GRID_SIZE) for c in range(GRID_SIZE) if grid[r][c] == 4)
+            ind_count = sum(1 for r in range(GRID_SIZE) for c in range(GRID_SIZE) if grid[r][c] == 5)
+            
+            monthly_tax = (employed_citizens * 2) + (comm_count * 3) + (ind_count * 5)
+            money += monthly_tax
+            if monthly_tax > 0:
+                message = f"Employed Tax Collected: ${monthly_tax}"
 
         elif event.type == pygame.MOUSEBUTTONUP and event.button == 1:
             last_painted_tile = None
@@ -330,13 +481,13 @@ while True:
                     elif current_tool == 2 and current_tile == 0 and money >= 50:
                         grid[row][col] = 2
                         money -= 50
-                        house_pop[(row, col)] = 2  # Starts with 2 people
+                        house_pop[(row, col)] = 2
                         recalculate_total_population()
                     elif current_tool == 3 and current_tile == 0 and money >= 75:
-                        grid[row][col] = 4  # Commercial zone
+                        grid[row][col] = 4
                         money -= 75
                     elif current_tool == 4 and current_tile == 0 and money >= 100:
-                        grid[row][col] = 5  # Industrial zone
+                        grid[row][col] = 5
                         money -= 100
                     elif current_tool == 5 and current_tile != 0:
                         if current_tile == 2 and (row, col) in house_pop:
