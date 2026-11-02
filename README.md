@@ -43,3 +43,10 @@ A tile-based city builder simulation built from scratch in Python using Pygame.
 Make sure you have Python and Pygame installed on your system:
 ```bash
 pip install pygame
+```
+
+<img width="1293" height="281" alt="image" src="https://github.com/user-attachments/assets/90a03208-1993-4852-a5a5-3a7cc1c62faf" />
+
+<img width="1917" height="1140" alt="image" src="https://github.com/user-attachments/assets/e5420f66-c99e-47c1-84f9-df5737fc4886" />
+
+
