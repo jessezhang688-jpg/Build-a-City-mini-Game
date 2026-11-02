@@ -11,7 +11,7 @@ SCREEN_WIDTH = 1200
 SCREEN_HEIGHT = 800
 
 screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.RESIZABLE)
-pygame.display.set_caption("Tile City Builder - Road Commuters & Economy")
+pygame.display.set_caption("Tile City Builder")
 clock = pygame.time.Clock()
 font = pygame.font.SysFont(None, 24)
 title_font = pygame.font.SysFont(None, 28)
