@@ -1,23 +1,23 @@
 #  Tile-Based City Builder (Pygame)
 
-A tile-based city builder simulation built from scratch in Python using Pygame. Design your city layout, manage your budget, watch citizens commute along road networks, and balance your economy through dynamic zoning and taxation!
+A tile-based city builder simulation built from scratch in Python using Pygame.
 
 ---
 
 ##  Key Features
 
-* **Organic World Generation**: Procedurally generated natural lakes and winding rivers on every new game.
-* **Drag-to-Paint Brush System**: Smoothly click and drag your mouse across the grid to build roads, zone areas, or bulldoze structures instantly.
-* **Dynamic Calendar & Time System**: Tracks in-game Months and Years in real-time, driving growth and seasonal tax collection.
-* **Realistic Economy & Taxation**: 
-  * Starts you off with a realistic **$500 budget**.
-  * Taxes are collected **monthly**, but only from citizens who are successfully employed and commuting to active commercial or industrial zones.
-* **Advanced Citizen Commuter System**:
-  * **Housing & Population**: Houses start with 2 residents and naturally grow up to a cap of **5 people**.
-  * **Road Pathfinding**: Citizens use Breadth-First Search (BFS) pathfinding to walk exclusively along connected road networks (`1`) from their homes to workplaces.
-  * **Workplace Capacity**: Commercial and industrial zones support up to **5 workers** each.
-  * **Visual Feedback**: White dots represent citizens inside your houses. When a citizen goes to work, their dot temporarily disappears from the house, travels along the roads to work, stays there for a shift, and walks back home!
-* **Save & Load System**: Instantly serialize your entire city state (grid, buildings, calendar time, and house populations) into a Base64 code via the terminal to save or share with friends.
+* **World Generation**: Generates the world randomly, and you can save the save code to save your progress in the terminal
+* **Drag-to-Paint Brush**: drag your mouse over the tiles to build stuff
+* **Calendar & Time**: Tracks time passed in the game (not that relistic tho)
+* **Taxation**: 
+  * Starts you off with a **$500 budget**.
+  * Taxes are collected **monthly**, but only from citizens who are commuting to active commercial or industrial zones.
+* **Citizen Commuter**:
+  * **Housing & Population**: Houses start with 2 residents can grow up to a cap of **5 people**.
+  * **Road Pathfinding**: Citizens use Breadth-First Search (BFS) pathfinding to walk along connected road tiles from their homes to workplaces.
+  * **Workplace Capacity**: Each commercial and industrial tile support up to **5 workers** each.
+  * **Visual**: White dots represent citizens inside your houses. When a citizen goes to work, their dot will walk from their house to their workplace!
+* **Save code gen**: Instantly generates your whole game progress into a Base64 code via the terminal to save or share with friends.
 
 ---
 
