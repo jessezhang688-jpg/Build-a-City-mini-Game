@@ -11,7 +11,7 @@ SCREEN_WIDTH = 1200
 SCREEN_HEIGHT = 800
 
 screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.RESIZABLE)
-pygame.display.set_caption("Tile City Builder")
+pygame.display.set_caption("Tile City Builder - Road Commuters & Economy")
 clock = pygame.time.Clock()
 font = pygame.font.SysFont(None, 24)
 title_font = pygame.font.SysFont(None, 28)
@@ -21,11 +21,11 @@ grid = [[0 for _ in range(GRID_SIZE)] for _ in range(GRID_SIZE)]
 house_pop = {}  # Tracks population for house tiles at (row, col)
 
 current_tool = 1
-money = 500      # Starting budget
+money = 500
 population = 0
 message = "Press R: New World | S: Save | L: Load"
 
-# Time System Variables (1 month = 5 real seconds)
+# time
 months_passed = 0
 years_passed = 0
 
@@ -33,7 +33,7 @@ is_loading = False
 input_text = ""
 last_painted_tile = None
 
-# Worker Commuter Particles
+# Workers list to track commuters
 workers = []
 
 # Game Timers
@@ -56,7 +56,7 @@ def generate_world():
         for c in range(GRID_SIZE):
             grid[r][c] = 0
 
-    # Organic Lakes
+    #Lakes
     num_lakes = random.randint(1, 3)
     for _ in range(num_lakes):
         sr = random.randint(4, GRID_SIZE - 5)
@@ -77,7 +77,7 @@ def generate_world():
                 if (nr, nc) not in lake_tiles:
                     lake_tiles.append((nr, nc))
 
-    # Winding Rivers
+    #Rivers
     num_rivers = random.randint(1, 3)
     for _ in range(num_rivers):
         r = random.randint(3, GRID_SIZE - 4)
@@ -139,7 +139,6 @@ def load_game(code):
 generate_world()
 
 def find_road_path(start, end):
-    """BFS to find a path consisting entirely of roads (1) between start and end."""
     queue = deque([[start]])
     visited = {start}
     
@@ -153,7 +152,6 @@ def find_road_path(start, end):
         for dr, dc in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
             nr, nc = r + dr, c + dc
             if 0 <= nr < GRID_SIZE and 0 <= nc < GRID_SIZE:
-                # Can walk on roads (1), or arrive at the end destination (4 or 5)
                 if (nr, nc) not in visited and (grid[nr][nc] == 1 or (nr, nc) == end):
                     visited.add((nr, nc))
                     queue.append(path + [(nr, nc)])
@@ -184,7 +182,6 @@ def spawn_commuters():
         if home_workers >= house_pop[h]:
             continue
 
-        # Check if there is a valid road path to work
         path = find_road_path(h, w)
         if path:
             workplace_counts[w] = workplace_counts.get(w, 0) + 1
@@ -204,7 +201,6 @@ def draw_ui_panels(width, height):
     grid_px = GRID_SIZE * tile_size
     offset_x = (width - grid_px) // 2
 
-    # Left Panel: City Stats & Time
     left_panel = pygame.Rect(0, 0, offset_x, height)
     pygame.draw.rect(screen, (25, 25, 30), left_panel)
     pygame.draw.line(screen, (70, 70, 80), (offset_x, 0), (offset_x, height), 2)
@@ -224,7 +220,6 @@ def draw_ui_panels(width, height):
     screen.blit(font.render("S - Save Game", True, (180, 180, 180)), (20, height - 110))
     screen.blit(font.render("L - Load Game", True, (180, 180, 180)), (20, height - 80))
 
-    # Right Panel: Build Menu
     right_x = offset_x + grid_px
     right_panel = pygame.Rect(right_x, 0, width - right_x, height)
     pygame.draw.rect(screen, (25, 25, 30), right_panel)
@@ -273,16 +268,25 @@ def draw_city(width, height):
         h = w["home"]
         absent_workers[h] = absent_workers.get(h, 0) + 1
 
+    # Group working workers by workplace to assign non-overlapping dot positions
+    working_groups = {}
+    for w in workers:
+        if w["state"] == "WORKING":
+            wp = w["end"]
+            if wp not in working_groups:
+                working_groups[wp] = []
+            working_groups[wp].append(w)
+
     for row in range(GRID_SIZE):
         for col in range(GRID_SIZE):
             tile = grid[row][col]
             
-            if tile == 1: color = (100, 100, 100)       # Road: Gray
-            elif tile == 2: color = (220, 60, 60)      # House: Red
-            elif tile == 3: color = (30, 144, 255)     # Water: Blue
-            elif tile == 4: color = (240, 200, 50)     # Commercial: Yellow
-            elif tile == 5: color = (200, 120, 40)     # Industrial: Orange
-            else: color = (85, 105, 80)                # Grass: Muted earthy green
+            if tile == 1: color = (100, 100, 100)
+            elif tile == 2: color = (220, 60, 60)
+            elif tile == 3: color = (30, 144, 255)
+            elif tile == 4: color = (240, 200, 50)
+            elif tile == 5: color = (200, 120, 40)
+            else: color = (85, 105, 80)
 
             rx = offset_x + col * tile_size
             ry = offset_y + row * tile_size
@@ -290,7 +294,6 @@ def draw_city(width, height):
             pygame.draw.rect(screen, color, rect)
             pygame.draw.rect(screen, (60, 75, 55), rect, 1)
 
-            # Draw citizen population dots inside houses (capped at 5 max, minus absent workers)
             if tile == 2 and (row, col) in house_pop:
                 pop_count = house_pop[(row, col)]
                 absent = absent_workers.get((row, col), 0)
@@ -307,10 +310,8 @@ def draw_city(width, height):
                     dy = ry + int(tile_size * oy)
                     pygame.draw.circle(screen, (255, 255, 255), (dx, dy), dot_radius)
 
-    # Update and draw worker commuter particles along road paths
     for w in workers[:]:
         path = w["path"]
-        idx = w["path_index"]
         
         if w["state"] == "GOING":
             w["progress"] += w["speed"]
@@ -338,13 +339,31 @@ def draw_city(width, height):
         elif w["state"] == "WORKING":
             w["work_timer"] -= 1
             end_r, end_c = w["end"]
-            curr_x = offset_x + end_c * tile_size + tile_size // 2
-            curr_y = offset_y + end_r * tile_size + tile_size // 2
+            
+            # Spread out workers inside the workplace tile so they don't stack
+            wp = (end_r, end_c)
+            worker_list = working_groups.get(wp, [])
+            try:
+                idx = worker_list.index(w)
+            except ValueError:
+                idx = 0
+                
+            dot_offsets = [
+                (0.30, 0.30), (0.70, 0.30), (0.30, 0.70), (0.70, 0.70),
+                (0.50, 0.50)
+            ]
+            ox, oy = dot_offsets[idx % len(dot_offsets)]
+            
+            rx = offset_x + end_c * tile_size
+            ry = offset_y + end_r * tile_size
+            curr_x = rx + int(tile_size * ox)
+            curr_y = ry + int(tile_size * oy)
+            
             pygame.draw.circle(screen, (255, 255, 255), (curr_x, curr_y), 3)
             
             if w["work_timer"] <= 0:
                 w["state"] = "RETURNING"
-                w["path"] = list(reversed(path))  # Reverse path to go back home
+                w["path"] = list(reversed(path))
                 w["path_index"] = 0
                 w["progress"] = 0.0
 
@@ -397,7 +416,6 @@ while True:
 
             spawn_commuters()
 
-            # Taxation only for citizens who are currently employed / commuting workers
             employed_citizens = len(workers)
             comm_count = sum(1 for r in range(GRID_SIZE) for c in range(GRID_SIZE) if grid[r][c] == 4)
             ind_count = sum(1 for r in range(GRID_SIZE) for c in range(GRID_SIZE) if grid[r][c] == 5)
@@ -451,18 +469,17 @@ while True:
                 elif event.key == pygame.K_3: current_tool = 3
                 elif event.key == pygame.K_4: current_tool = 4
                 elif event.key == pygame.K_5: current_tool = 5
-                elif event.key == pygame.K_r:
+                elif event.key == pygame.K_R or event.key == pygame.K_r:
                     generate_world()
                     message = "New World Generated!"
-                elif event.key == pygame.K_s:
+                elif event.key == pygame.K_S or event.key == pygame.K_s:
                     save_game()
                     message = "Saved! Code copied to Terminal."
-                elif event.key == pygame.K_l:
+                elif event.key == pygame.K_L or event.key == pygame.K_l:
                     is_loading = True
                     input_text = ""
                     message = "Enter save code & press ENTER"
 
-    # Drag-to-Paint Brush Handling
     if not is_loading and pygame.mouse.get_pressed()[0]:
         mx, my = pygame.mouse.get_pos()
         right_x = offset_x + grid_px
