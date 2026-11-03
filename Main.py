@@ -469,13 +469,13 @@ while True:
                 elif event.key == pygame.K_3: current_tool = 3
                 elif event.key == pygame.K_4: current_tool = 4
                 elif event.key == pygame.K_5: current_tool = 5
-                elif event.key == pygame.K_R or event.key == pygame.K_r:
+                elif event.key == pygame.K_r:
                     generate_world()
                     message = "New World Generated!"
-                elif event.key == pygame.K_S or event.key == pygame.K_s:
+                elif event.key == pygame.K_s:
                     save_game()
                     message = "Saved! Code copied to Terminal."
-                elif event.key == pygame.K_L or event.key == pygame.K_l:
+                elif event.key == pygame.K_l:
                     is_loading = True
                     input_text = ""
                     message = "Enter save code & press ENTER"
